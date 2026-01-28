@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Заголовки новостей</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #0c111a;
+      --panel: #131a24;
+      --text: #ecf2ff;
+      --muted: #8aa0c2;
+      --accent: #4cc2ff;
+      --accent-2: #82ffd2;
+      --danger: #ff7b7b;
+      --border: #1f2b3a;
+      --card: #0f1622;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 25% 20%, rgba(76,194,255,0.08), transparent 26%),
+                  radial-gradient(circle at 80% 0%, rgba(130,255,210,0.09), transparent 30%),
+                  var(--bg);
+      color: var(--text);
+      line-height: 1.4;
+    }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+    }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+    input[type="text"], input[type="url"], select, textarea {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(76,194,255,0.4); }
+    textarea { min-height: 120px; resize: vertical; }
+    .row { display: flex; gap: 10px; }
+    .row > div { flex: 1; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 999px;
+      background: rgba(76,194,255,0.12); color: var(--accent); font-size: 12px;
+      border: 1px solid rgba(76,194,255,0.2);
+    }
+    .pill.danger { background: rgba(255,123,123,0.12); border-color: rgba(255,123,123,0.2); color: #ffaaaa; }
+    .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+    .controls { display: flex; gap: 8px; }
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 14px;
+      background: linear-gradient(135deg, var(--accent), #6ae6ff);
+      color: #0a0f18;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: transform 0.05s ease, box-shadow 0.1s ease;
+      box-shadow: 0 8px 18px rgba(76,194,255,0.4);
+    }
+    button.secondary {
+      background: linear-gradient(135deg, #1f2838, #1a2333);
+      color: var(--text);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+    button:not(:disabled):active { transform: translateY(1px); }
+    .status { font-size: 13px; margin-top: 6px; }
+    .status.ok { color: var(--accent-2); }
+    .status.fail { color: var(--danger); }
+    .list {
+      max-height: 140px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: var(--card);
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-line;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .checkbox-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .checkbox-row label { display: inline-flex; gap: 6px; align-items: center; margin: 0; color: var(--text); font-size: 13px; }
+    .small { font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <h1>Заменить «Новость N»</h1>
+
+  <div class="card" id="stats-card">
+    <div class="section-title">Слои в макете</div>
+    <div class="chips" id="placeholder-info">
+      <span class="pill">Нет данных</span>
+    </div>
+    <div class="muted" id="sample"></div>
+    <div class="controls" style="margin-top:10px;">
+      <input type="text" id="pageName" placeholder="Имя страницы (опционально)" />
+      <button class="secondary" id="refresh">Обновить</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Источник заголовков</div>
+    <div class="checkbox-row" style="margin-bottom: 8px;">
+      <label><input type="radio" name="sourceType" value="manual" checked /> Вручную</label>
+      <label><input type="radio" name="sourceType" value="url" /> По URL</label>
+    </div>
+    <div id="url-block" style="display:none; margin-bottom:10px;">
+      <label for="sourceUrl">URL (JSON массив или обычный текст)</label>
+      <input type="url" id="sourceUrl" placeholder="https://example.com/headlines.json" />
+    </div>
+    <div id="manual-block">
+      <label for="manualText">Заголовки (каждый с новой строки)</label>
+      <textarea id="manualText" placeholder="Заголовок 1&#10;Заголовок 2"></textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Опции</div>
+    <div class="checkbox-row" style="margin-bottom:8px;">
+      <label><input type="checkbox" id="trimLines" checked /> Обрезать пробелы</label>
+      <label><input type="checkbox" id="skipEmpty" checked /> Пропускать пустые</label>
+    </div>
+    <div class="row" style="margin-bottom:8px;">
+      <div>
+        <label for="prefix">Префикс</label>
+        <input type="text" id="prefix" placeholder="Напр. «📰 »" />
+      </div>
+      <div>
+        <label for="suffix">Суффикс</label>
+        <input type="text" id="suffix" placeholder="Напр. « — источник»" />
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:8px;">
+      <div>
+        <label for="mapping">Заполнение</label>
+        <select id="mapping">
+          <option value="byNumber">По номеру «Новость N»</option>
+          <option value="byOrder">По порядку слоёв</option>
+        </select>
+      </div>
+      <div>
+        <label for="renameMode">Переименовать слои</label>
+        <select id="renameMode">
+          <option value="none">Не трогать имена</option>
+          <option value="toText">Переименовать в текст</option>
+          <option value="pattern">Шаблон</option>
+        </select>
+      </div>
+    </div>
+    <div id="pattern-block" style="display:none;">
+      <label for="renamePattern">Шаблон ( {n} — номер, {text} — заголовок )</label>
+      <input type="text" id="renamePattern" value="Заголовок {n}" />
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="controls">
+      <button class="secondary" id="preview">Показать список</button>
+      <button id="apply">Заменить в макете</button>
+    </div>
+    <div class="status muted" id="status">Готов к работе</div>
+    <div class="list" id="preview-list" style="display:none;"></div>
+  </div>
+
+  <script>
+    const state = {
+      working: false,
+    };
+
+    const qs = (id) => document.getElementById(id);
+    const statusEl = qs("status");
+    const previewList = qs("preview-list");
+    const placeholderInfo = qs("placeholder-info");
+    const sampleEl = qs("sample");
+    let cacheLoaded = false;
+
+    function setStatus(text, ok = null) {
+      statusEl.textContent = text;
+      statusEl.classList.remove("ok", "fail");
+      if (ok === true) statusEl.classList.add("ok");
+      if (ok === false) statusEl.classList.add("fail");
+    }
+
+    function toggleWorking(on) {
+      state.working = on;
+      ["apply", "preview", "refresh"].forEach((id) => (qs(id).disabled = on));
+    }
+
+    function collectPayload() {
+      const sourceType = document.querySelector('input[name="sourceType"]:checked').value;
+      return {
+        sourceType,
+        manualText: qs("manualText").value,
+        sourceUrl: qs("sourceUrl").value,
+        trimLines: qs("trimLines").checked,
+        skipEmpty: qs("skipEmpty").checked,
+        prefix: qs("prefix").value,
+        suffix: qs("suffix").value,
+        pageName: qs("pageName").value,
+        mapping: qs("mapping").value,
+        renameMode: qs("renameMode").value,
+        renamePattern: qs("renamePattern").value,
+      };
+    }
+
+    function applyVisibility() {
+      const sourceType = document.querySelector('input[name="sourceType"]:checked').value;
+      qs("manual-block").style.display = sourceType === "manual" ? "block" : "none";
+      qs("url-block").style.display = sourceType === "url" ? "block" : "none";
+      const renameMode = qs("renameMode").value;
+      qs("pattern-block").style.display = renameMode === "pattern" ? "block" : "none";
+    }
+
+    function refreshPlaceholders() {
+      parent.postMessage(
+        { pluginMessage: { type: "REQUEST_PLACEHOLDERS", pageName: qs("pageName").value } },
+        "*"
+      );
+    }
+
+    function renderPlaceholderInfo(snapshot) {
+      placeholderInfo.innerHTML = "";
+      if (!snapshot || !snapshot.count) {
+        placeholderInfo.innerHTML = '<span class="pill danger">Нет слоёв «Новость N»</span>';
+        sampleEl.textContent = "";
+        return;
+      }
+      const pill = document.createElement("span");
+      pill.className = "pill";
+      pill.textContent = `${snapshot.count} слоёв на странице «${snapshot.page}»`;
+      placeholderInfo.appendChild(pill);
+      if (snapshot.sample && snapshot.sample.length) {
+        sampleEl.textContent = "Примеры: " + snapshot.sample.join(" • ");
+      } else {
+        sampleEl.textContent = "";
+      }
+    }
+
+    qs("apply").addEventListener("click", () => {
+      toggleWorking(true);
+      setStatus("Применяю заголовки...");
+      parent.postMessage({ pluginMessage: { type: "APPLY", payload: collectPayload() } }, "*");
+    });
+
+    qs("preview").addEventListener("click", () => {
+      toggleWorking(true);
+      setStatus("Получаю список заголовков...");
+      parent.postMessage({ pluginMessage: { type: "PREVIEW", payload: collectPayload() } }, "*");
+    });
+
+    qs("refresh").addEventListener("click", () => {
+      refreshPlaceholders();
+      setStatus("Обновляю слои...");
+    });
+
+    document.querySelectorAll('input[name="sourceType"]').forEach((el) =>
+      el.addEventListener("change", applyVisibility)
+    );
+    qs("renameMode").addEventListener("change", applyVisibility);
+
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (!msg) return;
+      if (msg.type === "PLACEHOLDER_INFO") {
+        renderPlaceholderInfo(msg.snapshot);
+        toggleWorking(false);
+        setStatus("Готов к работе");
+      }
+      if (msg.type === "RESULT") {
+        toggleWorking(false);
+        setStatus(msg.message, msg.ok);
+        if (msg.snapshot) renderPlaceholderInfo(msg.snapshot);
+      }
+      if (msg.type === "PREVIEW_RESULT") {
+        toggleWorking(false);
+        setStatus(msg.message, msg.ok);
+        if (msg.snapshot) renderPlaceholderInfo(msg.snapshot);
+        if (msg.preview && msg.preview.length) {
+          previewList.style.display = "block";
+          previewList.textContent = msg.preview.join("\n");
+        } else {
+          previewList.style.display = "none";
+        }
+      }
+      if (msg.type === "CACHE" && msg.cache && !cacheLoaded) {
+        applyCache(msg.cache);
+        cacheLoaded = true;
+      }
+    };
+
+    applyVisibility();
+    refreshPlaceholders();
+
+    function applyCache(cache) {
+      try {
+        if (cache.pageName) qs("pageName").value = cache.pageName;
+        if (cache.prefix) qs("prefix").value = cache.prefix;
+        if (cache.suffix) qs("suffix").value = cache.suffix;
+        if (cache.mapping) qs("mapping").value = cache.mapping;
+        if (cache.renameMode) qs("renameMode").value = cache.renameMode;
+        if (cache.renamePattern) qs("renamePattern").value = cache.renamePattern;
+        if (cache.trimLines !== undefined) qs("trimLines").checked = !!cache.trimLines;
+        if (cache.skipEmpty !== undefined) qs("skipEmpty").checked = !!cache.skipEmpty;
+
+        if (cache.sourceType === "url") {
+          document.querySelector('input[name="sourceType"][value="url"]').checked = true;
+          qs("sourceUrl").value = cache.sourceUrl || "";
+        } else {
+          document.querySelector('input[name="sourceType"][value="manual"]').checked = true;
+        }
+
+        const lines = Array.isArray(cache.lines) ? cache.lines : [];
+        const manualFallback = cache.manualText || lines.join("\n");
+        qs("manualText").value = manualFallback;
+
+        applyVisibility();
+
+        const stamp = cache.savedAt ? new Date(cache.savedAt).toLocaleString() : "";
+        if (manualFallback) {
+          setStatus(stamp ? `Загрузил кэш заголовков от ${stamp}` : "Загрузил кэш заголовков", true);
+        }
+      } catch (e) {
+        // молча игнорируем
+      }
+    }
+  </script>
+</body>
+</html>

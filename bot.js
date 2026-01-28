@@ -2,6 +2,8 @@
 import { Telegraf } from 'telegraf';
 import { scrapeNotionPage, parseTopics } from './notion-scraper.js';
 import { createHash } from 'crypto';
+import http from 'http';
+import { URL } from 'url';
 import 'dotenv/config';
 
 console.log('🚀 Запуск бота...');
@@ -16,6 +18,8 @@ const bot = new Telegraf(process.env.BOT_TOKEN, {
 });
 
 const cache = new Map();
+const headlinesStore = new Map(); // key: notion URL, value: { title, headlines, updatedAt }
+const HEADLINES_PORT = Number(process.env.HEADLINES_PORT || 3131);
 
 bot.catch((err, ctx) => {
   console.error('❌ Ошибка бота:', err.message);
@@ -81,6 +85,19 @@ function formatDuration(ms) {
   const sec = Math.round(ms / 1000);
   if (sec < 60) return `${sec} сек`;
   return `${Math.floor(sec / 60)} мин ${sec % 60} сек`;
+}
+
+function cleanHeadline(header) {
+  if (!header) return '';
+  // убираем завершающие "(число)" и лишние пробелы
+  return header.replace(/\s*\(\d+\)\s*$/, '').trim();
+}
+
+function buildHeadlinesText(topics) {
+  return topics
+    .map(t => cleanHeadline(t.header))
+    .filter(Boolean)
+    .join('\n');
 }
 
 function sleep(ms) {
@@ -180,6 +197,12 @@ async function handleParse(ctx, url) {
     try { await ctx.telegram.deleteMessage(ctx.chat.id, status.message_id); } catch {}
     
     const elapsed = formatDuration(Date.now() - startTime);
+    const headlinesText = buildHeadlinesText(topics);
+    headlinesStore.set(url, {
+      title,
+      headlines: headlinesText,
+      updatedAt: Date.now()
+    });
     
     if (cachedTopics.size === 0) {
       await safeSend(ctx, `📄 ${title}\n📊 Тем: ${topics.length}\n⏱ ${elapsed}`);
@@ -196,7 +219,9 @@ async function handleParse(ctx, url) {
       await sleep(500);
       
       if (newTopics.length === 0 && changedTopics.length === 0) {
-        return safeSend(ctx, '👍 Изменений нет!');
+        await safeSend(ctx, '👍 Изменений нет!');
+        // Файл с заголовками больше не отправляем автоматически
+        return;
       }
       
       if (newTopics.length > 0) {
@@ -213,6 +238,7 @@ async function handleParse(ctx, url) {
     }
     
     await safeSend(ctx, '✅ Готово!');
+    // Файл с заголовками больше не отправляем автоматически
     
   } catch (e) {
     console.error('❌', e.message);
@@ -281,6 +307,25 @@ async function sendTopics(ctx, topics, emoji = '📰') {
   }
 }
 
+async function sendHeadlinesMessage(ctx, text) {
+  if (!text || !text.trim()) return;
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  // Telegram лимит ~4096 символов; разобьём по кускам
+  const chunkSize = 3800;
+  let chunk = '';
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if ((chunk + line + '\n').length > chunkSize) {
+      await safeSend(ctx, chunk.trimEnd());
+      chunk = '';
+    }
+    chunk += line + '\n';
+  }
+  if (chunk.trim().length) {
+    await safeSend(ctx, chunk.trimEnd());
+  }
+}
+
 bot.command('parse', async (ctx) => {
   const url = ctx.message.text.replace('/parse', '').trim();
   await handleParse(ctx, url);
@@ -307,6 +352,23 @@ bot.command('raw', async (ctx) => {
   }
 });
 
+bot.command('headlines', async (ctx) => {
+  const url = ctx.message.text.replace('/headlines', '').trim();
+  if (!url) return ctx.reply('❌ Укажи URL');
+  const entry = headlinesStore.get(url);
+  if (!entry) return ctx.reply('❌ Для этой ссылки ещё нет заголовков. Сначала сделайте /parse.');
+  await sendHeadlinesMessage(ctx, entry.headlines);
+});
+
+// Алиас /headers
+bot.command('headers', async (ctx) => {
+  const url = ctx.message.text.replace('/headers', '').trim();
+  if (!url) return ctx.reply('❌ Укажи URL');
+  const entry = headlinesStore.get(url);
+  if (!entry) return ctx.reply('❌ Для этой ссылки ещё нет заголовков. Сначала сделайте /parse.');
+  await sendHeadlinesMessage(ctx, entry.headlines);
+});
+
 bot.on('text', async (ctx) => {
   const text = ctx.message.text.trim();
   if (text.startsWith('/')) return;
@@ -320,7 +382,45 @@ bot.on('text', async (ctx) => {
 
 bot.launch().then(() => {
   console.log('✅ Бот запущен!');
+  startHeadlinesServer();
 });
 
 process.once('SIGINT', () => bot.stop());
 process.once('SIGTERM', () => bot.stop());
+
+function startHeadlinesServer() {
+  const server = http.createServer((req, res) => {
+    try {
+      const urlObj = new URL(req.url, `http://localhost:${HEADLINES_PORT}`);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      
+      if (urlObj.pathname === '/headlines') {
+        const target = urlObj.searchParams.get('url');
+        if (!target) {
+          res.statusCode = 400;
+          res.end('missing url param');
+          return;
+        }
+        const entry = headlinesStore.get(target);
+        if (!entry) {
+          res.statusCode = 404;
+          res.end('not found');
+          return;
+        }
+        res.end(entry.headlines || '');
+        return;
+      }
+      
+      res.statusCode = 404;
+      res.end('not found');
+    } catch (e) {
+      res.statusCode = 500;
+      res.end('internal error');
+    }
+  });
+  
+  server.listen(HEADLINES_PORT, () => {
+    console.log(`🌐 Локальный сервер заголовков: http://localhost:${HEADLINES_PORT}/headlines?url=<notion_url>`);
+  });
+}
