@@ -1,4 +1,4 @@
-// notion-script.js
+﻿// notion-script.js
 (async () => {
   const SCROLL_PAUSE = 200;
   const TOGGLE_PAUSE = 150;
@@ -10,6 +10,13 @@
   const qsa = (root, sel) => {
     try { return Array.from((root || document).querySelectorAll(sel)); }
     catch { return []; }
+  };
+  const DEBUG_REF = (window.__NOTION_DEBUG_REF || '').toLowerCase().trim();
+  const debugRef = (ref, extra = '') => {
+    if (!DEBUG_REF) return;
+    const low = (ref || '').toLowerCase();
+    if (!low.includes(DEBUG_REF)) return;
+    console.log(`📜 ref-debug: "${ref}" ${extra}`);
   };
   
   async function progress(msg) {
@@ -222,13 +229,43 @@
     const lines = text.split('\n');
     for (const line of lines) {
       const trimmed = line.trim();
-      if (/^\/[A-Za-zА-Яа-яЁё]/.test(trimmed) && 
-          !trimmed.startsWith('/http') && 
-          !trimmed.startsWith('//')) {
-        markers.push(trimmed);
+      // Убираем возможные маркеры списка перед слэшем
+      const cleaned = trimmed.replace(/^([•*–—-]+|\d+[.)])\s*/u, '');
+      if (/^\/\s*[A-Za-zА-Яа-яЁё]/.test(cleaned) &&
+          !cleaned.startsWith('/http') &&
+          !cleaned.startsWith('//')) {
+        markers.push(cleaned.replace(/^\/\s+/, '/'));
       }
     }
     return markers;
+  }
+
+  function normalizeText(input) {
+    return (input || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0430-\u044f\u0451]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function isUrlRef(text) {
+    if (!text) return false;
+    return /^https?:\/\//i.test(text) || /[a-z0-9-]+\.[a-z]{2,}/i.test(text);
+  }
+
+  function isBodyExcerpt(ref, bodyNorm) {
+    if (!ref || !bodyNorm) return false;
+    if (ref.startsWith('/')) return false;
+    if (isUrlRef(ref)) return false;
+    const hasEllipsis = /[.…]/.test(ref);
+    const clean = ref.replace(/[.…]+$/g, '').trim();
+    if (!clean) return false;
+    if (!hasEllipsis && clean.length < 25) return false;
+    const refNorm = normalizeText(clean);
+    if (!refNorm) return false;
+    const inBody = bodyNorm.includes(refNorm);
+    debugRef(ref, `| inBody=${inBody} | hasEllipsis=${hasEllipsis} | len=${clean.length}`);
+    return inBody;
   }
 
   // Извлекает текст из блока с правильными переносами
@@ -312,11 +349,11 @@
     text = text.replace(/\bи\/или\b/gi, '__IILI__');
     
     // Разбиваем склеенные предложения:
-    // Цифра + Заглавная буква (21В → 21\n\nВ)
-    text = text.replace(/(\d)([A-ZА-ЯЁ][a-zа-яё])/g, '$1\n\n$2');
+    // Цифра + Заглавная буква (21В → 21\n\nВ) — только кириллица
+    text = text.replace(/(\d)([\u0410-\u042F\u0401][\u0430-\u044F\u0451])/g, '$1\n\n$2');
     
-    // Маленькая буква + Заглавная без пробела (словоСлово → слово\n\nСлово)
-    text = text.replace(/([a-zа-яё])([A-ZА-ЯЁ])/g, '$1\n\n$2');
+    // Маленькая буква + Заглавная без пробела (словоСлово → слово\n\nСлово) — только кириллица
+    text = text.replace(/([\u0430-\u044F\u0451])([\u0410-\u042F\u0401])/g, '$1\n\n$2');
     
     // После .!? перед Заглавной
     text = text.replace(/([.!?])([A-ZА-ЯЁ])/g, '$1\n\n$2');
@@ -375,7 +412,32 @@
     const text = extractText(block, heading);
     const markers = extractMarkers(text);
     const popoverRefs = await collectRefs(block, heading);
-    const allRefs = [...popoverRefs, ...markers];
+    let allRefs = [...popoverRefs, ...markers];
+    
+    const seen = new Set();
+    allRefs = allRefs.filter(r => {
+      const key = (r || '').trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    
+    const bodyNorm = normalizeText(text);
+    allRefs = allRefs.filter(r => !isBodyExcerpt(r, bodyNorm));
+    
+    const urlRefs = allRefs.filter(r => isUrlRef(r));
+    const dropUrls = new Set();
+    for (const u of urlRefs) {
+      for (const v of urlRefs) {
+        if (u !== v && v.toLowerCase().startsWith(u.toLowerCase()) && v.length > u.length) {
+          dropUrls.add(u);
+        }
+      }
+    }
+    if (dropUrls.size) {
+      allRefs = allRefs.filter(r => !dropUrls.has(r));
+    }
+    
     refsCount += allRefs.length;
     
     if (heading) {

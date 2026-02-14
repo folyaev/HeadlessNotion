@@ -1,4 +1,4 @@
-// notion-scraper.js
+﻿// notion-scraper.js
 import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
@@ -7,14 +7,39 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export async function scrapeNotionPage(url, onProgress = () => {}) {
+  const debugRef = process.env.NOTION_DEBUG_REF || '';
+  const headlessEnv = process.env.PUPPETEER_HEADLESS;
+  const headless =
+    headlessEnv === undefined
+      ? 'new'
+      : !['0', 'false', 'no'].includes(String(headlessEnv).toLowerCase());
+  const slowMo = Number(process.env.PUPPETEER_SLOWMO || 0) || 0;
+  const devtools = ['1', 'true', 'yes'].includes(
+    String(process.env.PUPPETEER_DEVTOOLS || '').toLowerCase()
+  );
+  const viewportWidth = Number(process.env.PUPPETEER_WIDTH || 1280) || 1280;
+  const viewportHeight = Number(process.env.PUPPETEER_HEIGHT || 800) || 800;
+
   const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    headless,
+    slowMo,
+    devtools,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      `--window-size=${viewportWidth},${viewportHeight}`
+    ],
+    defaultViewport: { width: viewportWidth, height: viewportHeight }
   });
 
   try {
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 800 });
+    await page.setViewport({ width: viewportWidth, height: viewportHeight });
+    if (debugRef) {
+      await page.evaluateOnNewDocument((ref) => {
+        window.__NOTION_DEBUG_REF = ref;
+      }, debugRef);
+    }
     
     page.on('console', msg => {
       const text = msg.text();

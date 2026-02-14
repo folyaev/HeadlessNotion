@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node bot.js",
+    "debug": "set PUPPETEER_HEADLESS=false&& set PUPPETEER_SLOWMO=350&& set PUPPETEER_WIDTH=1500&& set PUPPETEER_HEIGHT=1500&& node bot.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
