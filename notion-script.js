@@ -101,6 +101,13 @@
   function extractFromPopover(pop, heading) {
     const items = [];
     const headingLower = (heading || '').toLowerCase().trim();
+    const isDateStamp = (value) => {
+      const text = String(value || '').trim();
+      if (!text) return false;
+      if (/^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}(?:\s+\d{1,2}:\d{2})?$/.test(text)) return true;
+      if (/^\d{4}[./-]\d{1,2}[./-]\d{1,2}(?:\s+\d{1,2}:\d{2})?$/.test(text)) return true;
+      return false;
+    };
     
     qsa(pop, 'a[href]').forEach(a => {
       if (a.href && !items.includes(a.href)) {
@@ -154,6 +161,7 @@
       if (/^\d+\s*(d|д|day|дн|h|ч|час|m|м|min|мин|s|с|sec|сек)\s*(ago|назад)?$/i.test(cleaned)) return;
       if (/^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d/i.test(cleaned)) return;
       if (/^\d{1,2}\s+(янв|фев|мар|апр|мая|июн|июл|авг|сен|окт|ноя|дек)/i.test(cleaned)) return;
+      if (isDateStamp(cleaned)) return;
       if (/^руслан\s+усачев$/i.test(cleaned)) return;
       if (/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}$/i.test(cleaned)) return;
       if (cleaned.toLowerCase() === headingLower) return;
