@@ -162,6 +162,15 @@ function consumeFollowingAndSentence(parts, index) {
   return match[1];
 }
 
+function moveAccidentalTrailingLetterToNextPart(parts, index, paragraph) {
+  const next = String(parts[index + 1]?.[0] || '');
+  if (!/^\p{Ll}/u.test(next)) return paragraph;
+  const match = String(paragraph || '').match(/^(.*[.!?…]\s+)(\p{L})$/u);
+  if (!match) return paragraph;
+  parts[index + 1][0] = `${match[2]}${next}`;
+  return match[1].trimEnd();
+}
+
 function collectLastDiscussionOccurrences(blocks = []) {
   const last = new Map();
   blocks.forEach((block, blockIndex) => {
@@ -224,6 +233,7 @@ function renderRichTextBlock(block, recordMap, context = {}) {
     const hasUrlComment = comments.some(isUrl);
     if (hasUrlComment) {
       paragraph += consumeFollowingAndSentence(parts, index);
+      paragraph = moveAccidentalTrailingLetterToNextPart(parts, index, paragraph);
     }
     const before = paragraph.trim();
     if (before) pushParagraph(before);
