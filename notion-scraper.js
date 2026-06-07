@@ -3,11 +3,31 @@ import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { scrapeNotionRecordMapPage } from './notion-recordmap-scraper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export async function scrapeNotionPage(url, onProgress = () => {}) {
   const debugRef = process.env.NOTION_DEBUG_REF || '';
+  const captureRefs = ['1', 'true', 'yes'].includes(
+    String(process.env.NOTION_CAPTURE_REFS || '').toLowerCase()
+  );
+  const puppeteerOnly = ['1', 'true', 'yes'].includes(
+    String(process.env.NOTION_PUPPETEER_ONLY || '').toLowerCase()
+  );
+
+  if (!debugRef && !captureRefs && !puppeteerOnly) {
+    try {
+      onProgress('📦 Загружаю Notion recordMap');
+      const content = await scrapeNotionRecordMapPage(url);
+      onProgress('✅ Notion recordMap scraped');
+      return content;
+    } catch (error) {
+      const message = error?.message || String(error);
+      onProgress(`⚠️ recordMap не сработал, пробую Puppeteer: ${message}`);
+    }
+  }
+
   const headlessEnv = process.env.PUPPETEER_HEADLESS;
   const headless =
     headlessEnv === undefined
@@ -40,6 +60,11 @@ export async function scrapeNotionPage(url, onProgress = () => {}) {
         window.__NOTION_DEBUG_REF = ref;
       }, debugRef);
     }
+    if (captureRefs) {
+      await page.evaluateOnNewDocument(() => {
+        window.__NOTION_CAPTURE_REFS = true;
+      });
+    }
     
     page.on('console', msg => {
       const text = msg.text();
@@ -62,6 +87,7 @@ export async function scrapeNotionPage(url, onProgress = () => {}) {
 
     const content = await page.evaluate(scriptContent, { timeout: 180000 });
     
+    if (captureRefs) return content;
     return content;
   } finally {
     await browser.close();
